@@ -1,0 +1,1118 @@
+---
+title: "CEE 272R Case 2 Exploration"
+author: "Sam Kramer"
+date: "6/3/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(modelr)
+library(forcats)
+library(stringr)
+
+path_fig = "~/Desktop/"
+
+SCALE_FACTOR = 10000
+```
+
+## Functions
+
+This function rounds battery sizes to the nearest 0.005, or 50 MWh. 
+```{r}
+round_frac <- function(x) {
+  x <- x * 200
+  x <- ceiling(x)
+  x <- x / 200
+  x
+}
+```
+
+
+## Read data
+```{r}
+setwd("~/Documents/School/Spring/CEE 272R/Project/CEE272R/case_2/results/")
+
+up_none_raw <- read_csv("battery_power_up_none.csv", col_names = FALSE)
+up_5_raw <- read_csv("battery_power_up_five.csv", col_names = FALSE)
+up_10_raw <- read_csv("battery_power_up_ten.csv", col_names = FALSE)
+up_20_raw <- read_csv("battery_power_up_twenty.csv", col_names = FALSE)
+
+
+down_none_raw <- read_csv("battery_power_down_none.csv", col_names = FALSE)
+down_5_raw <- read_csv("battery_power_down_five.csv", col_names = FALSE)
+down_10_raw <- read_csv("battery_power_down_ten.csv", col_names = FALSE)
+down_20_raw <- read_csv("battery_power_down_twenty.csv", col_names = FALSE)
+
+
+ramp_rates_up_raw <- read_csv("Ramp_Rates_Up.csv",
+                              col_names = FALSE)
+ramp_rates_down_raw <- read_csv("Ramp_Rates_Down.csv",
+                                col_names = FALSE)
+```
+
+## Tidy the data
+
+#### Up Ramps
+```{r}
+# Create column names (i.e. ramp reduction amounts) for the data frame
+reduction_up <- seq(0,(ncol(up_none_raw) - 1) * 0.0001,
+                    length.out = ncol(up_none_raw))
+
+colnames(up_none_raw) <- reduction_up
+colnames(up_5_raw) <- reduction_up
+colnames(up_10_raw) <- reduction_up
+colnames(up_20_raw) <- reduction_up
+
+
+# Add a column for "event number" and tidy the data
+up_none <- up_none_raw %>% 
+  mutate(event_number = row_number()) %>%
+  gather(-event_number, key = "slope_reduction", value = "battery_size") %>% 
+  mutate(slope_reduction = as.numeric(slope_reduction),
+         id = str_c("u", event_number)) %>% 
+  select(-event_number) %>% 
+  rename(`0` = battery_size)
+
+up_5 <- up_5_raw %>% 
+  mutate(event_number = row_number()) %>%
+  gather(-event_number, key = "slope_reduction", value = "battery_size") %>% 
+  mutate(slope_reduction = as.numeric(slope_reduction),
+         id = str_c("u", event_number)) %>% 
+  select(-event_number) %>% 
+  rename(`5` = battery_size)
+
+up_10 <- up_10_raw %>% 
+  mutate(event_number = row_number()) %>%
+  gather(-event_number, key = "slope_reduction", value = "battery_size") %>% 
+  mutate(slope_reduction = as.numeric(slope_reduction),
+         id = str_c("u", event_number)) %>% 
+  select(-event_number) %>% 
+  rename(`10` = battery_size)
+
+up_20 <- up_20_raw %>% 
+  mutate(event_number = row_number()) %>%
+  gather(-event_number, key = "slope_reduction", value = "battery_size") %>% 
+  mutate(slope_reduction = as.numeric(slope_reduction),
+         id = str_c("u", event_number)) %>% 
+  select(-event_number) %>% 
+  rename(`20` = battery_size)
+
+
+up_ramps <- up_none %>% 
+  full_join(up_5, by = c("slope_reduction", "id")) %>% 
+  full_join(up_10, by = c("slope_reduction", "id")) %>% 
+  full_join(up_20, by = c("slope_reduction", "id")) %>% 
+  gather(-slope_reduction, -id, key = "E_to_P", value = "battery_size") %>% 
+  mutate(E_to_P = as.integer(E_to_P))
+
+
+up_ramps
+```
+
+#### Down Ramps
+```{r}
+reduction_down <- seq(0,(ncol(down_none_raw) - 1) * 0.0001,
+                      length.out = ncol(down_none_raw))
+colnames(down_none_raw) <- reduction_down
+colnames(down_5_raw) <- reduction_down
+colnames(down_10_raw) <- reduction_down
+colnames(down_20_raw) <- reduction_down
+
+down_none <- down_none_raw %>% 
+  mutate(event_number = row_number()) %>%
+  gather(-event_number, key = "slope_reduction", value = "battery_size") %>% 
+  mutate(slope_reduction = as.numeric(slope_reduction),
+         id = str_c("d", event_number)) %>% 
+  select(-event_number) %>% 
+  rename(`0` = battery_size)
+
+down_5 <- down_5_raw %>% 
+  mutate(event_number = row_number()) %>%
+  gather(-event_number, key = "slope_reduction", value = "battery_size") %>% 
+  mutate(slope_reduction = as.numeric(slope_reduction),
+         id = str_c("d", event_number)) %>% 
+  select(-event_number) %>% 
+  rename(`5` = battery_size)
+
+down_10 <- down_10_raw %>% 
+  mutate(event_number = row_number()) %>%
+  gather(-event_number, key = "slope_reduction", value = "battery_size") %>% 
+  mutate(slope_reduction = as.numeric(slope_reduction),
+         id = str_c("d", event_number)) %>% 
+  select(-event_number) %>% 
+  rename(`10` = battery_size)
+
+down_20 <- down_20_raw %>% 
+  mutate(event_number = row_number()) %>%
+  gather(-event_number, key = "slope_reduction", value = "battery_size") %>% 
+  mutate(slope_reduction = as.numeric(slope_reduction),
+         id = str_c("d", event_number)) %>% 
+  select(-event_number) %>% 
+  rename(`20` = battery_size)
+
+down_ramps <- down_none %>% 
+  full_join(down_5, by = c("slope_reduction", "id")) %>% 
+  full_join(down_10, by = c("slope_reduction", "id")) %>% 
+  full_join(down_20, by = c("slope_reduction", "id")) %>% 
+  gather(-slope_reduction, -id, key = "E_to_P", value = "battery_size") %>% 
+  mutate(E_to_P = as.integer(E_to_P))
+
+
+down_ramps
+```
+
+
+
+### Clean true ramp rate data
+
+#### Up Ramps
+```{r}
+ramp_rates_up <- ramp_rates_up_raw
+
+colnames(ramp_rates_up) <- c("ramp_rate")
+
+ramp_rates_up <- ramp_rates_up %>%
+  mutate(event_number = row_number(),
+         id = str_c("u", event_number)) %>% 
+  select(-event_number)
+
+ramp_rates_up
+```
+
+#### Down Ramps
+```{r}
+ramp_rates_down <- ramp_rates_down_raw
+
+colnames(ramp_rates_down) <- c("ramp_rate")
+
+ramp_rates_down <- ramp_rates_down %>%
+  mutate(event_number = row_number(),
+         id = str_c("d", event_number)) %>% 
+  select(-event_number)
+
+ramp_rates_down
+```
+
+## Create Table for All Ramps
+
+```{r}
+all_ramps <- up_ramps %>% 
+  rename(up = battery_size) %>% 
+  full_join(down_ramps %>% rename(down = battery_size),
+            by = c("id", "slope_reduction","E_to_P")) %>% 
+  gather(up, down, key = "direction", value = "battery_size")
+
+all_ramps
+```
+
+
+```{r}
+ramp_rates_all <- ramp_rates_up %>%
+  rename(up = ramp_rate) %>%
+  full_join(ramp_rates_down %>% rename(down = ramp_rate),
+            by = "id") %>%
+  gather(-id, key = "direction", value = "ramp_rate") %>% 
+  filter(!is.na(ramp_rate))
+
+ramp_rates_all
+```
+
+
+## Add variables
+
+### Calculate percentage reduction
+
+#### Up Ramps
+```{r}
+up_ramps <- up_ramps %>%
+  left_join(ramp_rates_up, by = "id") %>% 
+  mutate(percent_reduction = slope_reduction / ramp_rate) %>%
+  select(id, slope_reduction, percent_reduction, battery_size, everything())
+
+up_ramps
+```
+
+#### Down Ramps
+```{r}
+down_ramps <- down_ramps %>% 
+  left_join(ramp_rates_down, by = "id") %>% 
+  mutate(percent_reduction = slope_reduction / ramp_rate) %>%
+  select(id, slope_reduction, percent_reduction, battery_size, everything())
+
+down_ramps
+```
+
+
+#### All Ramps
+```{r}
+all_ramps <- all_ramps %>% 
+  left_join(ramp_rates_all, 
+            by = c("id", "direction")) %>% 
+  filter(!is.na(ramp_rate)) %>% 
+  mutate(percent_reduction = slope_reduction / ramp_rate) %>% 
+  select(id, direction, battery_size, slope_reduction, percent_reduction, 
+         everything())
+
+all_ramps
+```
+
+
+### Round battery sizes
+
+#### Up Ramps
+```{r}
+# Round the battery sizes
+up_ramps <- up_ramps %>% 
+  mutate(rounded_size = round_frac(battery_size))
+
+up_ramps
+```
+
+#### Down Ramps
+```{r}
+# Round the battery sizes
+down_ramps <- down_ramps %>% 
+  mutate(rounded_size = round_frac(battery_size))
+
+down_ramps
+```
+
+#### All Ramps
+```{r}
+all_ramps <- all_ramps %>% 
+  mutate(rounded_size = round_frac(battery_size))
+
+all_ramps
+```
+
+
+### Find maximum slope reduction for each combination of event and battery size
+```{r}
+max_events_up <- up_ramps %>% 
+  group_by(rounded_size,id, E_to_P) %>% 
+  summarize(slope_reduction = max(slope_reduction),
+            percent_reduction = max(percent_reduction)
+            ) %>% 
+  ungroup()
+
+max_events_up
+```
+
+```{r}
+max_events_down <- down_ramps %>% 
+  group_by(rounded_size,id, E_to_P) %>% 
+  summarize(slope_reduction = max(slope_reduction),
+            percent_reduction = max(percent_reduction)
+            ) %>% 
+  ungroup()
+
+max_events_down
+```
+
+
+```{r}
+max_events_all <- all_ramps %>% 
+  group_by(rounded_size, id, direction, E_to_P) %>% 
+  summarize(slope_reduction = max(slope_reduction),
+            percent_reduction = max(percent_reduction)
+            ) %>% 
+  ungroup()
+
+max_events_all
+```
+
+## Make full dataset for all battery sizes and events
+
+#### Up Ramps
+```{r}
+full_dataset_up <- max_events_up %>% 
+  data_grid(rounded_size, id, E_to_P) %>% 
+  left_join(max_events_up, by = c("id", "rounded_size", "E_to_P")) %>% 
+  select(id, rounded_size, E_to_P, slope_reduction) %>% 
+  arrange(E_to_P, id, rounded_size) %>% 
+  mutate(slope_reduction = ifelse(rounded_size == 0, 0, slope_reduction)) %>% 
+  fill(slope_reduction) %>% 
+  left_join(ramp_rates_up, by = "id") %>% 
+  mutate(percent_reduction = slope_reduction / ramp_rate)
+
+full_dataset_up
+
+
+full_medians_up <- full_dataset_up %>% 
+  group_by(rounded_size, E_to_P) %>% 
+  summarize(median = median(slope_reduction),
+            median_percent = median(percent_reduction),
+            q10 = quantile(slope_reduction, 0.1),
+            q90 = quantile(slope_reduction, 0.9),
+            q10_percent = quantile(percent_reduction, 0.1),
+            q90_percent = quantile(percent_reduction, 0.9)
+  ) %>% 
+  ungroup()
+
+full_medians_up
+```
+
+```{r}
+full_dataset_down <- max_events_down %>% 
+  data_grid(rounded_size, id, E_to_P) %>% 
+  full_join(max_events_down, by = c("id", "rounded_size", "E_to_P")) %>% 
+  select(id, rounded_size, E_to_P, slope_reduction) %>% 
+  arrange(E_to_P, id, rounded_size) %>% 
+  mutate(slope_reduction = ifelse(rounded_size == 0, 0, slope_reduction)) %>% 
+  fill(slope_reduction) %>% 
+  left_join(ramp_rates_down, by = "id") %>% 
+  mutate(percent_reduction = slope_reduction / ramp_rate)
+
+full_dataset_down
+
+
+full_medians_down <- full_dataset_down %>% 
+  group_by(rounded_size, E_to_P) %>% 
+  summarize(median = median(slope_reduction),
+            median_percent = median(percent_reduction),
+            q10 = quantile(slope_reduction, 0.1),
+            q90 = quantile(slope_reduction, 0.9),
+            q10_percent = quantile(percent_reduction, 0.1),
+            q90_percent = quantile(percent_reduction, 0.9)
+  ) %>% 
+  ungroup()
+
+full_medians_down
+```
+
+
+```{r}
+full_dataset <- full_dataset_up %>% 
+  mutate(direction = "up") %>% 
+  full_join(full_dataset_down %>% 
+              mutate(direction = "down"), 
+            by = c("id", "rounded_size", "slope_reduction",
+                   "ramp_rate", "percent_reduction", "direction", "E_to_P")) %>% 
+  select(id, direction, rounded_size, E_to_P, slope_reduction, percent_reduction, 
+         ramp_rate, everything())
+
+nrow(full_dataset_down)
+nrow(full_dataset_up)
+nrow(full_dataset_down) + nrow(full_dataset_up)
+nrow(full_dataset)
+
+
+full_medians <- full_dataset %>%
+  group_by(direction, rounded_size, E_to_P) %>% 
+  summarize(median = median(slope_reduction),
+            median_percent = median(percent_reduction),
+            q10 = quantile(slope_reduction, 0.1),
+            q90 = quantile(slope_reduction, 0.9),
+            q10_percent = quantile(percent_reduction, 0.1),
+            q90_percent = quantile(percent_reduction, 0.9)) %>% 
+  ungroup()
+
+full_dataset
+full_medians
+```
+
+
+### Calculate statistics for all ramps together
+```{r}
+all_ramps_full <- max_events_all %>% 
+  data_grid(rounded_size, id, E_to_P) %>% 
+  full_join(max_events_all %>% select(-direction), by = c("id", "rounded_size", "E_to_P")) %>% 
+  select(id, rounded_size, E_to_P, slope_reduction) %>% 
+  arrange(E_to_P, id, rounded_size) %>%
+  mutate(slope_reduction = ifelse(rounded_size == 0, 0, slope_reduction)) %>% 
+  fill(slope_reduction) %>% 
+  left_join(ramp_rates_all %>% select(-direction), by = "id") %>% 
+  filter(!is.na(ramp_rate)) %>% 
+  mutate(percent_reduction = slope_reduction / ramp_rate)
+
+# max_events_down %>% 
+#   data_grid(rounded_size, id, E_to_P) %>% 
+#   full_join(max_events_down, by = c("id", "rounded_size", "E_to_P")) %>% 
+#   select(id, rounded_size, E_to_P, slope_reduction) %>% 
+#   arrange(E_to_P, id, rounded_size) %>% 
+#   mutate(slope_reduction = ifelse(rounded_size == 0, 0, slope_reduction)) %>% 
+#   fill(slope_reduction) %>% 
+#   left_join(ramp_rates_down, by = "id") %>% 
+#   mutate(percent_reduction = slope_reduction / ramp_rate)
+
+all_ramps_full_medians <- all_ramps_full %>% 
+  group_by(E_to_P, rounded_size) %>% 
+  summarize(median = median(slope_reduction, na.rm = T),
+            median_percent = median(percent_reduction, na.rm = T),
+            q10 = quantile(slope_reduction, 0.1, na.rm = T),
+            q90 = quantile(slope_reduction, 0.9, na.rm = T),
+            q10_percent = quantile(percent_reduction, 0.1, na.rm = T),
+            q90_percent = quantile(percent_reduction, 0.9, na.rm = T)
+  ) %>% 
+  ungroup()
+```
+
+```{r}
+missing <- all_ramps_full %>% 
+  anti_join(full_dataset, by = c("id", "rounded_size", "E_to_P"))
+```
+
+```{r}
+missing
+
+missing %>% 
+  group_by(id) %>% 
+  summarize(rate = max(ramp_rate)) %>% 
+  ggplot(aes(rate)) + 
+  geom_histogram(binwidth = 0.001)
+
+# full_dataset %>% 
+#   filter(id == "u99")
+
+ramp_rates_all %>% 
+  ggplot(aes(ramp_rate)) + 
+  geom_histogram(binwidth = 0.001)
+
+missing %>% 
+  group_by(id) %>% 
+  summarize(rate = max(ramp_rate)) %>% 
+  anti_join(ramp_rates_all, by = c("id"))
+
+full_dataset_up %>% 
+  filter(id == "u99") %>% 
+  arrange(desc(rounded_size))
+```
+
+
+
+
+
+
+
+```{r}
+full_medians_down %>% 
+  filter(E_to_P == 0) %>% 
+  mutate(E_to_P = as.factor(E_to_P)) %>% 
+  ggplot(aes(rounded_size * SCALE_FACTOR / 1000, median_percent * 100)) + 
+  geom_ribbon(aes(ymin = q10_percent * 100, 
+                  ymax = q90_percent * 100),
+              alpha = 0.3) +
+  # facet_grid(E_to_P~direction) +
+  # facet_wrap(~direction) +
+  # geom_line(size = 1.5) + 
+  geom_line() + 
+  coord_cartesian(xlim = c(0,75)) +
+  scale_y_continuous(breaks = seq(0, 100, 10)) +
+  scale_x_continuous(breaks = seq(0, 75, 15)) +
+  labs(x = "Battery Size (GWh)", 
+       y = "Median Ramp Rate Reduction (%)",
+       title = "Relative Ramp Reduction",
+       subtitle = "A 42 GWh battery will completely flatten all detected wind up-ramp events.",
+       caption = "Based on 2012 Texas total wind generation.\nThe grey region signifies ramp reductions between the 10th and 90th percentile for each battery size."
+       )
+```
+
+
+
+
+
+
+
+
+## Final Figures
+
+```{r}
+theme_set(theme_light() +
+            theme(#panel.grid.major.x = element_blank(),
+                  panel.grid.minor.x = element_blank(),
+                  panel.grid.minor.y = element_blank(),
+                  axis.title = element_text(size = 13),
+                  axis.text = element_text(size = 11),
+                  strip.text.x = element_text(size = 13)) +
+            theme(legend.position = 'bottom',
+                  legend.text = element_text(size = 12),
+                  legend.title = element_text(size = 13)) +
+            theme(plot.title = element_text(size = 26))
+          )
+```
+
+
+
+### Box Plots
+
+```{r}
+boxplot_final <- all_ramps_full %>%
+  filter(rounded_size <= 1.025) %>%
+  mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000,
+         E_to_P = as.factor(E_to_P)) %>% 
+  ggplot(aes(rounded_size, slope_reduction * SCALE_FACTOR)) +
+  geom_boxplot(aes(group = cut_width(rounded_size, 1, center = 0)),
+               outlier.alpha = 0.01) +
+  # facet_grid(E_to_P~direction) + 
+  scale_x_continuous(breaks = c(0:10)) +
+  coord_cartesian(xlim = c(1,10.5), ylim = c(0, 300)) +
+  labs(x = "Battery Size (GWh)", 
+       y = "Ramp Rate Reduction (MW/hr)")
+
+boxplot_final
+
+ggsave("boxplot_final.png", plot = boxplot_final, device = "png", 
+      path = path_fig, width = 6, height = 4, units = "in", dpi = 900)
+```
+
+
+### Line Chart
+
+```{r}
+median_final <- all_ramps_full_medians %>% 
+  mutate(E_to_P = as.factor(E_to_P),
+         E_to_P = fct_recode(E_to_P, `0 hr` = "0", `5 hr` = "5", 
+                             `10 hr` = "10", `20 hr` = "20")) %>% 
+  ggplot(aes(rounded_size * SCALE_FACTOR / 1000, median_percent * 100)) + 
+  # geom_line(aes(color = E_to_P)) +
+  geom_line(aes(color = E_to_P), size = 1.2) +
+  # facet_wrap(~direction) + 
+  coord_cartesian(xlim = c(0,50)) +
+  scale_y_continuous(breaks = seq(0, 100, 10)) +
+  scale_x_continuous(breaks = seq(0, 50, 10)) +
+  labs(x = "Battery Size (GWh)", 
+       y = "Median Ramp Rate Reduction (%)",
+       color = "Energy to Power Ratio"
+       )
+
+median_final
+
+ggsave("median_final.png", plot = median_final, device = "png", 
+      path = path_fig, width = 6, height = 4, units = "in", dpi = 900)
+```
+
+
+
+```{r}
+# median_plot <- full_medians %>% 
+#   mutate(E_to_P = as.factor(E_to_P),
+#          direction = ifelse(direction != "down", "Up Ramps", "Down Ramps")
+#          ) %>% 
+#   ggplot(aes(rounded_size * SCALE_FACTOR / 1000, median_percent * 100)) + 
+#   geom_line(aes(color = E_to_P), size = 1.2) +
+#   facet_wrap(~direction) + 
+#   coord_cartesian(xlim = c(0,75)) +
+#   scale_y_continuous(breaks = seq(0, 100, 10)) +
+#   scale_x_continuous(breaks = seq(0, 75, 15)) +
+#   labs(x = "Battery Size (GWh)", 
+#        y = "Median Ramp Rate Reduction (%)",
+#        title = "Relative Ramp Reduction",
+#        color = "Energy to Power Ratio\n(GWh/GW)"
+#        # subtitle = "A 42 GWh battery will completely flatten all detected wind up-ramp events.",
+#        # caption = "Based on 2012 Texas total wind generation.\nThe grey region signifies ramp reductions between the 10th and 90th percentile for each battery size."
+#        ) + 
+#     theme(legend.position = "bottom", legend.text = element_text(size = 12))
+# 
+# 
+# median_plot
+# 
+# # ggsave(plot = median_plot, filename = str_c("median_plot", ".png"),
+# #        width = 7, height = 5, dpi = 900, units = "in", path = path_fig, device = "png")
+```
+
+### ECDF
+
+#### Baseline case: no restriction on charge/discharge rate
+```{r}
+E2P_FIXED = 5
+
+ecdf_all_1 <- max_events_all %>% 
+  mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+  filter(rounded_size == 1,
+         E_to_P == E2P_FIXED) %>% 
+  .$slope_reduction %>% 
+  ecdf(.)
+
+ecdf_all_5 <- max_events_all %>% 
+  mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+  filter(rounded_size == 5,
+         E_to_P == E2P_FIXED) %>% 
+  .$slope_reduction %>% 
+  ecdf(.)
+
+ecdf_all_10 <- max_events_all %>% 
+  mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+  filter(rounded_size == 10,
+         E_to_P == E2P_FIXED) %>% 
+  .$slope_reduction %>% 
+  ecdf(.)
+```
+
+```{r}
+y_breaks = seq(0, 1, 0.25)
+y_labels = c("0%", "25%", "50%", "75%", "100%")
+
+ecdf_batt_final <- all_ramps_full %>%
+  filter(rounded_size == E2P_FIXED) %>% 
+  distinct(slope_reduction) %>%
+  mutate(`1 GWh` = ecdf_all_1(slope_reduction),
+         `5 GWh` = ecdf_all_5(slope_reduction),
+         `10 GWh` = ecdf_all_10(slope_reduction)
+         ) %>%
+  gather(-slope_reduction, key = "Battery Size", value = "ecdf") %>%
+  mutate(`Battery Size` = as.factor(`Battery Size`),
+         `Battery Size` = fct_relevel(`Battery Size`, c("1 GWh", "5 GWh", "10 GWh"))
+         ) %>%
+  ggplot(aes(slope_reduction * SCALE_FACTOR, 1 - ecdf)) +
+  geom_line(aes(color = `Battery Size`),  size = 1.5) +
+  coord_cartesian(xlim = c(0, 400)) +
+  scale_y_continuous(breaks = y_breaks, labels = y_labels) +
+  labs(x = "Minimum Ramp Rate Reduction (MW/hr)",
+       y = "Percent of Ramps Above Threshold"
+       ) +
+  theme(legend.position = "bottom", legend.text = element_text(size = 12))
+
+ecdf_batt_final
+
+ggsave("ecdf_batt_final.png", plot = ecdf_batt_final, device = "png", 
+      path = path_fig, width = 6, height = 4, units = "in", dpi = 900)
+```
+
+
+
+#### Fixed battery size, variable E to P ratio
+
+```{r}
+BATT_SIZE = 5
+
+ecdf_all_e2p0 <- max_events_all %>% 
+  mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+  filter(rounded_size == BATT_SIZE,
+         E_to_P == 0) %>% 
+  .$slope_reduction %>% 
+  ecdf(.)
+
+ecdf_all_e2p5 <- max_events_all %>% 
+  mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+  filter(rounded_size == BATT_SIZE,
+         E_to_P == 5) %>% 
+  .$slope_reduction %>% 
+  ecdf(.)
+
+ecdf_all_e2p10 <- max_events_all %>% 
+  mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+  filter(rounded_size == BATT_SIZE,
+         E_to_P == 10) %>% 
+  .$slope_reduction %>% 
+  ecdf(.)
+
+ecdf_all_e2p20 <- max_events_all %>% 
+  mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+  filter(rounded_size == BATT_SIZE,
+         E_to_P == 20) %>% 
+  .$slope_reduction %>% 
+  ecdf(.)
+```
+
+```{r}
+y_breaks = seq(0, 1, 0.25)
+y_labels = c("0%", "25%", "50%", "75%", "100%")
+
+ecdf_e2p_final <- all_ramps_full %>%
+  filter(rounded_size == BATT_SIZE) %>% 
+  distinct(slope_reduction) %>%
+  mutate(`0` = ecdf_all_e2p0(slope_reduction),
+         `5` = ecdf_all_e2p5(slope_reduction),
+         `10` = ecdf_all_e2p10(slope_reduction),
+         `20` = ecdf_all_e2p20(slope_reduction)
+         ) %>%
+  gather(-slope_reduction, key = "Energy to Power Ratio", value = "ecdf") %>%
+  mutate(`Energy to Power Ratio` = 
+           as.integer(`Energy to Power Ratio`),
+          `Energy to Power Ratio` = 
+           as.factor(`Energy to Power Ratio`),
+         `Energy to Power Ratio` = 
+           fct_recode(`Energy to Power Ratio`,
+                      `0 hr` = "0", `5 hr` = "5", `10 hr` = "10", `20 hr` = "20")
+
+         ) %>%
+  ggplot(aes(slope_reduction * SCALE_FACTOR, 1 - ecdf)) +
+  geom_line(aes(color = `Energy to Power Ratio`),  size = 1.5) +
+  coord_cartesian(xlim = c(0, 400)) +
+  scale_y_continuous(breaks = y_breaks, labels = y_labels) +
+  labs(x = "Minimum Ramp Rate Reduction (MW/hr)",
+       y = "Percent of Ramps Above Threshold"
+       ) +
+  theme(legend.position = "bottom", legend.text = element_text(size = 12))
+
+ecdf_e2p_final
+
+ggsave("ecdf_e2p_final.png", plot = ecdf_e2p_final, device = "png", 
+      path = path_fig, width = 6, height = 4, units = "in", dpi = 900)
+```
+
+
+```{r}
+# y_breaks = seq(0, 1, 0.25)
+# y_labels = c("0%", "25%", "50%", "75%", "100%")
+# 
+# full_dataset %>%
+#   filter(E_to_P == 0) %>% 
+#   distinct(direction, slope_reduction) %>%
+#   mutate(`1 GWh` = ifelse(direction == "up", ecdf_up_1(slope_reduction),
+#                       ecdf_down_1(slope_reduction)),
+#          `5 GWh` = ifelse(direction == "up", ecdf_up_5(slope_reduction),
+#                       ecdf_down_5(slope_reduction)),
+#          `10 GWh` = ifelse(direction == "up", ecdf_up_10(slope_reduction),
+#                       ecdf_down_10(slope_reduction))) %>%
+#   gather(-slope_reduction,-direction, key = "Battery Size", value = "ecdf") %>%
+#   mutate(`Battery Size` = as.factor(`Battery Size`),
+#          `Battery Size` = fct_relevel(`Battery Size`,
+#                                              c("1 GWh", "5 GWh",
+#                                                  "10 GWh")),
+#           direction = ifelse(direction != "down", "Up Ramps", "Down Ramps")
+# 
+#          ) %>%
+#   ggplot(aes(slope_reduction * SCALE_FACTOR, 1 - ecdf, color = `Battery Size`)) +
+#   geom_line(size = 1.5) +
+#   # facet_wrap(~direction) +
+#   coord_cartesian(xlim = c(0, 500)) +
+#   scale_y_continuous(breaks = y_breaks, labels = y_labels) +
+#   labs(x = "Minimum Ramp Rate Reduction (MW/hr)",
+#        y = "Percent of Ramps Above Threshold",
+#        title = "Ramp Rate Reduction Ability",
+#        subtitle = "Larger batteries can smooth ramps to a greater degree.",
+#        caption = "Based on 2012 Texas total wind generation."
+#        ) +
+#   theme(legend.position = "bottom", legend.text = element_text(size = 12))
+```
+
+
+
+
+```{r}
+# BATT_SIZE = 5
+# 
+# ecdf_up_e2p0 <- max_events_up %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == BATT_SIZE,
+#          E_to_P == 0) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_up_e2p5 <- max_events_up %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == BATT_SIZE,
+#          E_to_P == 5) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_up_e2p10 <- max_events_up %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == BATT_SIZE,
+#          E_to_P == 10) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_up_e2p20 <- max_events_up %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == BATT_SIZE,
+#          E_to_P == 20) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_down_e2p0 <- max_events_down %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == BATT_SIZE,
+#          E_to_P == 0) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_down_e2p5 <- max_events_down %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == BATT_SIZE,
+#          E_to_P == 5) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_down_e2p10 <- max_events_down %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == BATT_SIZE,
+#          E_to_P == 10) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_down_e2p20 <- max_events_down %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == BATT_SIZE,
+#          E_to_P == 20) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+```
+
+
+```{r}
+# y_breaks = seq(0, 1, 0.25)
+# y_labels = c("0%", "25%", "50%", "75%", "100%")
+# 
+# full_dataset %>%
+#   filter(rounded_size == BATT_SIZE) %>% 
+#   distinct(direction, slope_reduction) %>%
+#   mutate(`0 GWh/GW` = ifelse(direction == "up", ecdf_up_e2p0(slope_reduction),
+#                       ecdf_down_e2p0(slope_reduction)),
+#          `5 GWh/GW` = ifelse(direction == "up", ecdf_up_e2p5(slope_reduction),
+#                       ecdf_down_e2p5(slope_reduction)),
+#          `10 GWh/GW` = ifelse(direction == "up", ecdf_up_e2p10(slope_reduction),
+#                       ecdf_down_e2p10(slope_reduction)),
+#          `20 GWh/GW` = ifelse(direction == "up", ecdf_up_e2p20(slope_reduction),
+#                       ecdf_down_e2p20(slope_reduction))
+#          ) %>%
+#   gather(-slope_reduction,-direction, key = "Power to Energy Ratio", value = "ecdf") %>%
+#   mutate(`Power to Energy Ratio` = as.factor(`Power to Energy Ratio`),
+#          `Power to Energy Ratio` = fct_relevel(`Power to Energy Ratio`,
+#                                              c("0 GWh/GW", "5 GWh/GW",
+#                                                  "10 GWh/GW", "20 GWh/GW")),
+#           direction = ifelse(direction != "down", "Up Ramps", "Down Ramps")
+# 
+#          ) %>%
+#   ggplot(aes(slope_reduction * SCALE_FACTOR, 1 - ecdf, color = `Power to Energy Ratio`)) +
+#   geom_line(size = 1.5) +
+#   facet_wrap(~direction) +
+#   coord_cartesian(xlim = c(0, 400)) +
+#   scale_y_continuous(breaks = y_breaks, labels = y_labels) +
+#   labs(x = "Minimum Ramp Rate Reduction (MW/hr)",
+#        y = "Percent of Ramps Above Threshold",
+#        title = "Effect of Charge/Discharge Rate",
+#        subtitle = "Lower energy-to-power ratios allow for inreased smoothing with a fixed battery size.",
+#        caption = "Based on 2012 Texas total wind generation. Battery size is fixed at 5 GWh"
+#        ) +
+#   theme(legend.position = "bottom", legend.text = element_text(size = 12))
+```
+
+
+
+
+```{r}
+# ecdf_up_1 <- max_events_up %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == 1,
+#          E_to_P == 0) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_up_5 <- max_events_up %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == 5,
+#          E_to_P == 0) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_up_10 <- max_events_up %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == 10,
+#          E_to_P == 0) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_down_1 <- max_events_down %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == 1,
+#          E_to_P == 0) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_down_5 <- max_events_down %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == 5,
+#          E_to_P == 0) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+# 
+# ecdf_down_10 <- max_events_down %>% 
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   filter(rounded_size == 10,
+#          E_to_P == 0) %>% 
+#   .$slope_reduction %>% 
+#   ecdf(.)
+
+```
+
+
+
+
+
+
+
+
+```{r}
+# all_ramps_full_medians %>% 
+#   # filter(E_to_P != 5) %>% 
+#   # mutate(E_to_P = as.factor(E_to_P),
+#   #        direction = ifelse(direction != "down", "Up Ramps", "Down Ramps")
+#   #        ) %>% 
+#   mutate(E_to_P = as.factor(E_to_P)) %>% 
+#   ggplot(aes(rounded_size * SCALE_FACTOR / 1000, median * SCALE_FACTOR)) + 
+#   # geom_ribbon(aes(ymin = q10_percent * 100, 
+#   #                 ymax = q90_percent * 100),
+#   #             alpha = 0.3) +
+#   # facet_grid(E_to_P~direction) +
+#   geom_line(aes(color = E_to_P), size = 1.2) +
+#   # facet_wrap(~direction) + 
+#   # geom_line() +
+#   coord_cartesian(xlim = c(0,75)) +
+#   # scale_y_continuous(breaks = seq(0, 100, 10)) +
+#   scale_x_continuous(breaks = seq(0, 75, 15)) +
+#   labs(x = "Battery Size (GWh)", 
+#        y = "Median Ramp Rate Reduction (MW/hr)",
+#        # title = "Relative Ramp Reduction",
+#        color = "Energy to Power Ratio\n(GWh/GW)"
+#        # subtitle = "A 42 GWh battery will completely flatten all detected wind up-ramp events.",
+#        # caption = "Based on 2012 Texas total wind generation.\nThe grey region signifies ramp reductions between the 10th and 90th percentile for each battery size."
+#        ) + 
+#     theme(legend.position = "bottom", legend.text = element_text(size = 12))
+```
+
+## Data Exploration
+
+
+## Plot data
+```{r}
+# up_ramps %>% 
+#   ggplot(aes(battery_size * SCALE_FACTOR)) + 
+#   geom_histogram(binwidth = 0.05 * SCALE_FACTOR)
+# 
+# all_ramps %>% 
+#   ggplot(aes(battery_size * SCALE_FACTOR)) + 
+#   geom_histogram(binwidth = 0.05 * SCALE_FACTOR) + 
+#   facet_wrap(~direction)
+
+# up_ramps %>% 
+#   filter(slope_reduction == 1*10^-4,
+#          battery_size < quantile(battery_size, 0.9, na.rm = TRUE)) %>% 
+#   ggplot(aes(battery_size)) + 
+#   geom_histogram(bins = 100)
+
+# up_ramps %>% 
+#   filter(slope_reduction %in% quantile(up_ramps$slope_reduction)) %>% 
+#   ggplot(aes(battery_size)) + 
+#   geom_freqpoly(aes(color = factor(slope_reduction)), binwidth = 0.05)
+```
+
+
+```{r}
+# up_ramps %>% 
+#   filter(!is.nan(battery_size)) %>% 
+#   ggplot(aes(slope_reduction * SCALE_FACTOR)) + 
+#   geom_histogram(binwidth = 0.0001*SCALE_FACTOR) + 
+#   labs(x = "Ramp Rate Reduction (MW/hr)", y = "Count")
+# 
+# up_ramps %>% 
+#   filter(!is.nan(battery_size)) %>% 
+#   ggplot(aes(slope_reduction * SCALE_FACTOR, ..density..)) + 
+#   geom_histogram(binwidth = 0.0001*SCALE_FACTOR) + 
+#   labs(x = "Ramp Rate Reduction (MW/hr)", y = "Fraction of Events")
+
+# all_ramps %>% 
+#   filter(!is.nan(battery_size)) %>% 
+#   ggplot(aes(slope_reduction * SCALE_FACTOR)) + 
+#   geom_histogram(binwidth = 0.0001*SCALE_FACTOR) + 
+#   labs(x = "Ramp Rate Reduction (MW/hr)", y = "Count") + 
+#   facet_wrap(~direction)
+# 
+# all_ramps %>% 
+#   filter(!is.nan(battery_size)) %>% 
+#   ggplot(aes(slope_reduction * SCALE_FACTOR, ..density..)) + 
+#   geom_histogram(binwidth = 0.0001*SCALE_FACTOR) + 
+#   labs(x = "Ramp Rate Reduction (MW/hr)", y = "Fraction of Events") + 
+#   facet_wrap(~direction)
+
+# up_ramps %>% 
+#   filter(!is.nan(battery_size))
+```
+
+
+```{r}
+# full_dataset_up %>%
+#   filter(rounded_size <= 1.025) %>%
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   ggplot(aes(rounded_size, slope_reduction * SCALE_FACTOR)) +
+#   # geom_boxplot(aes(group = cut_number(rounded_size, 10)), outlier.alpha = 0) +
+#   geom_boxplot(aes(group = cut_width(rounded_size, 1, center = 0)), outlier.alpha = 0) +
+#   scale_x_continuous(breaks = c(0:10)) +
+#   # coord_cartesian(xlim = c(1,10.5), ylim = c(0, 450)) + 
+#   labs(x = "Battery Size (GWh)", y = "Ramp Rate Reduction (MW/hr)") +
+#   theme_light()
+# 
+# full_dataset_up %>%
+#   filter(rounded_size <= 1.025) %>%
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   ggplot(aes(rounded_size, percent_reduction * 100)) +
+#   # geom_boxplot(aes(group = cut_number(rounded_size, 10))) +
+#   geom_boxplot(aes(group = cut_width(rounded_size, 1, center = 0)), outlier.alpha = 0) +
+#   # coord_cartesian(xlim = c(1,10.5)) +
+#   scale_x_continuous(breaks = c(0:10)) +
+#   labs(x = "Battery Size (GWh)", y = "Ramp Rate Reduction (%)") +
+#   theme_light()
+# 
+# full_medians_up %>% 
+#   ggplot(aes(rounded_size * SCALE_FACTOR / 1000, median * SCALE_FACTOR)) + 
+#   geom_ribbon(aes(ymin = q10 * SCALE_FACTOR, ymax = q90 * SCALE_FACTOR),
+#               alpha = 0.3) +
+#   geom_line() + 
+#   # coord_cartesian(xlim = c(0, 50)) +
+#   labs(x = "Battery Size (GWh)", y = "Median Ramp Rate Reduction (MW/hr)") +
+#   theme_light()
+# 
+# full_medians_up %>% 
+#   ggplot(aes(rounded_size * SCALE_FACTOR / 1000, median_percent * 100)) + 
+#   geom_ribbon(aes(ymin = q10_percent * 100, 
+#                   ymax = q90_percent * 100),
+#               alpha = 0.3) +
+#   geom_line() + 
+#   # coord_cartesian(xlim = c(0,50)) +
+#   scale_y_continuous(breaks = seq(0, 100, 10)) +
+#   labs(x = "Battery Size (GWh)", y = "Median Ramp Rate Reduction (%)") + 
+#   theme_light()
+
+```
+
+
+```{r}
+# full_dataset_down %>%
+#   filter(rounded_size <= 1.025) %>%
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   ggplot(aes(rounded_size, slope_reduction * SCALE_FACTOR)) +
+#   # geom_boxplot(aes(group = cut_number(rounded_size, 10)), outlier.alpha = 0) +
+#   geom_boxplot(aes(group = cut_width(rounded_size, 1, center = 0)), outlier.alpha = 0) +
+#   scale_x_continuous(breaks = c(0:10)) +
+#   coord_cartesian(xlim = c(1,10.5), ylim = c(0, 450)) + 
+#   labs(x = "Battery Size (GWh)", y = "Ramp Rate Reduction (MW/hr)") +
+#   theme_light()
+# 
+# full_dataset_down %>%
+#   filter(rounded_size <= 1.025) %>%
+#   mutate(rounded_size = rounded_size * SCALE_FACTOR / 1000) %>% 
+#   ggplot(aes(rounded_size, percent_reduction * 100)) +
+#   # geom_boxplot(aes(group = cut_number(rounded_size, 10))) +
+#   geom_boxplot(aes(group = cut_width(rounded_size, 1, center = 0)), outlier.alpha = 0) +
+#   coord_cartesian(xlim = c(1,10.5)) +
+#   scale_x_continuous(breaks = c(0:10)) +
+#   labs(x = "Battery Size (GWh)", y = "Ramp Rate Reduction (%)") +
+#   theme_light()
+# 
+# full_medians_down %>% 
+#   ggplot(aes(rounded_size * SCALE_FACTOR / 1000, median * SCALE_FACTOR)) + 
+#   geom_ribbon(aes(ymin = q10 * SCALE_FACTOR, ymax = q90 * SCALE_FACTOR),
+#               alpha = 0.3) +
+#   geom_line() + 
+#   coord_cartesian(xlim = c(0, 50)) +
+#   labs(x = "Battery Size (GWh)", y = "Median Ramp Rate Reduction (MW/hr)") +
+#   theme_light()
+# 
+# full_medians_down %>% 
+#   ggplot(aes(rounded_size * SCALE_FACTOR / 1000, median_percent * 100)) + 
+#   geom_ribbon(aes(ymin = q10_percent * 100, 
+#                   ymax = q90_percent * 100),
+#               alpha = 0.3) +
+#   geom_line() + 
+#   coord_cartesian(xlim = c(0,50)) +
+#   scale_y_continuous(breaks = seq(0, 100, 10)) +
+#   labs(x = "Battery Size (GWh)", y = "Median Ramp Rate Reduction (%)") + 
+#   theme_light()
+
+```
+
+

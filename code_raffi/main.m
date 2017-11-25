@@ -1,0 +1,163 @@
+clear all; close all; clc;
+
+%% - load normalized bpa dataset.
+data = load('bpa_wind_normalized.mat');
+wind_all = data.wind;
+
+%% Reduce dataset size using L1-trend fitting.
+
+wind = wind_all(1:5000);
+
+% 1 - perform L1-trend filtering.
+[w_pw] = l1tf(wind, 1);
+
+% 2 - use second derivative to extract line segments.
+d1_pw     = diff(w_pw);
+d2_pw     = diff(diff(w_pw));
+chng_idx  = find(abs(d2_pw) > 0.0001);
+
+% 3 - this is the reduced dataset.
+t_pw_dp   = chng_idx;
+w_pw_dp   = w_pw(chng_idx);
+
+
+%%
+% Here we define the rule set we use (you can choose your own. just 
+% change COST_1 to whatever you want.
+% NOTE - this function has more parameters than our publication.
+
+% minimum ramp length: x(k) - x(i) > val
+params.min_rmp_len   = 0;        
+
+% maximum ramp length: x(k) - x(i) < val
+params.max_rmp_len   = Inf;      
+
+% weight given for interval: w(i, k) = val*( x(k) - x(i) ).^2;
+params.cost_int_len  = 1;        
+
+% additional cost (NOT USED): val*( p(k) - p(i) ).^2;
+params.cost_pwr_swng = 0;        
+
+% pwr-swing threshold: p(k) - p(i) > val
+params.pwr_swing_thresh = 0.2;   
+
+% if val percent decline within interval. downramp declared.
+params.dwn_rmp_thresh   = 0.1;  
+
+% avg_t p.c. of time slope > avg_slope
+params.avg_t     = 0.0001;       
+
+% at least start_t 
+params.avg_slope = 0.001;                
+
+% of time slope > start_slope 
+params.start_t     = 0;          
+params.start_slope = 0;          
+
+% at least end_t 
+params.end_t       = 0;          
+
+% of time slope > start_slope   
+params.end_slope   = 0;          
+
+% assign cost function.
+cost_fxn  = @COST_1;
+
+%%
+% Since dynamic program is too big.  We use the sliding window ramp
+% detection method.
+
+% perform ramp-detect on W_size points. (this is many fewer actual points
+% since we reduced the dataset);
+W_size    = 800;
+
+% N_overlap: number of samples which overlap between windows:
+N_overlap = 300;
+
+% perform sliding_window_ramp_detect
+detected_up_ramps = sliding_window_ramp_detect...
+    (W_size, N_overlap, chng_idx, wind, w_pw, params, cost_fxn);
+
+detected_down_ramps = sliding_window_ramp_detect...
+    (W_size, N_overlap, chng_idx, 1-wind, 1-w_pw, params, cost_fxn);
+
+%% Some Evaluation Plots.
+plot_idx = 1:1000;
+
+figure(1); clf; hold on;
+kk = find(chng_idx < plot_idx(end));
+plot(1:plot_idx(end), zeros(1, length(plot_idx)), 'LineWidth', 3);
+
+for k = 1:length(kk)
+    plot([chng_idx(k) chng_idx(k)], [0 d1_pw(chng_idx(k))], 'b', 'LineWidth', 3)
+    plot([chng_idx(k)], [d1_pw(chng_idx(k))], 'bs', 'LineWidth', 3)
+end
+
+% Plot initial dataset.
+figure(2); clf; hold on;
+plot(plot_idx, wind(plot_idx), 'b', 'LineWidth', 0.9)
+plot(plot_idx, w_pw(plot_idx), 'r', 'LineWidth', 0.9)
+plot(chng_idx(kk), w_pw(chng_idx(kk)), 'rs', 'LineWidth', 1.1)
+
+%%
+n_max  = floor((length(wind) + W_size - N_overlap )/( W_size - N_overlap))-1;
+dp_idx = {};
+
+for n = 1:(n_max-1)
+    
+    % generate window parameters.
+    n_start     = (n-1)*(W_size - N_overlap);
+    if (n_start == 0); n_start = 1; end 
+    n_end       = n*W_size - (n-1)*N_overlap;
+    
+    % dp_idx{n}   = [n_start, n_end];
+    disp(['n=',num2str(n),'/', num2str(n_max), ' signal_idx = {', ...
+        num2str(n_start),' ', num2str(n_end), '}']);
+    
+    w_idx = n_start:n_end;
+    idx   = find(chng_idx > n_start & chng_idx < n_end);
+    
+    if ( ~isempty(idx) )
+        
+        % set figure; 
+        figure(3); clf; hold on;
+        plot_idx = n_start:n_end;
+        
+        % plot wind dataset.
+        plot(plot_idx, wind(plot_idx), 'b', 'LineWidth', 0.9)
+        
+        % plot piecewise line segments and points.
+        plot(plot_idx, w_pw(plot_idx), 'r', 'LineWidth', 0.9)
+        plot(chng_idx(idx), w_pw(chng_idx(idx)), 'rs', 'LineWidth', 1.1)
+
+        % plot up and down ramps.
+        curr_up_ramp_idx   = find( ...
+            (n_start < detected_up_ramps(:, 1) & detected_up_ramps(:, 2) < n_end) == 1 );
+
+        curr_down_ramp_idx = find( ...
+            (n_start < detected_down_ramps(:, 1) & detected_down_ramps(:, 2) < n_end) == 1 );
+        
+        for k = 1:length(curr_up_ramp_idx) 
+            c_ur_st_t = detected_up_ramps(curr_up_ramp_idx(k), 1);
+            c_ur_e_t  = detected_up_ramps(curr_up_ramp_idx(k), 2);
+
+            c_ur_st_p = detected_up_ramps(curr_up_ramp_idx(k), 3);
+            c_ur_e_p  = detected_up_ramps(curr_up_ramp_idx(k), 4);
+            
+            plot([c_ur_st_t c_ur_e_t], [c_ur_st_p c_ur_e_p], 'gs-', 'LineWidth', 2);
+        end
+        
+        for k = 1:length(curr_down_ramp_idx) 
+            c_dn_st_t = detected_down_ramps(curr_down_ramp_idx(k), 1);
+            c_dn_e_t  = detected_down_ramps(curr_down_ramp_idx(k), 2);
+
+            c_dn_st_p = detected_down_ramps(curr_down_ramp_idx(k), 3);
+            c_dn_e_p  = detected_down_ramps(curr_down_ramp_idx(k), 4);
+            
+            plot([c_dn_st_t c_dn_e_t], [1-c_dn_st_p 1-c_dn_e_p], 'ms-', 'LineWidth', 2);
+        end
+        
+        pause(2);
+
+    end
+end

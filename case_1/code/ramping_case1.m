@@ -1,0 +1,91 @@
+clear all
+clc
+%% Load in the wind generation data
+addpath(genpath('~/CEE272R')) % set main path
+load('HourlyWindGenTX.mat') % Raw hourly wind generation and forecast data
+load('WindGenRampResults.mat') % Ramp detection algorithm results
+
+%% run algorithm
+max(ActualGeneration)
+max(HouraheadForecast)
+% choose normalization factor to 10,000 MW to be consistant with max of
+% actual and forecast generation
+scale_factor = 10000;
+lambda = 0.1;
+
+%%
+[detected_up_ramps_real, detected_down_ramps_real] = ramp_detection_model(ActualGeneration(200:400), scale_factor, lambda);
+%%
+[detected_up_ramps_pred, detected_down_ramps_pred] = ramp_detection_model(HouraheadForecast, scale_factor, lambda);
+
+%% plot the extracted ramps
+figure(1); hold on;
+real = ActualGeneration(1:800)/scale_factor;
+plot(real)
+plot_ramps_simple(detected_up_ramps_real, detected_down_ramps_real)
+legend ('Detected up (real)','Detected down (real)')
+
+
+%% extract corresponding ?ramps? from other time series
+pred_to_real_ramps_up = compare_ramps(detected_up_ramps_pred,ActualGeneration,scale_factor);
+pred_to_real_ramps_down = compare_ramps(detected_down_ramps_pred,ActualGeneration,scale_factor);
+%%
+real_to_pred_ramps_up = compare_ramps(detected_up_ramps_real,HouraheadForecast,scale_factor);
+real_to_pred_ramps_down = compare_ramps(detected_down_ramps_real,HouraheadForecast,scale_factor);
+
+%% plot extracted ramps and corresponding time series ramps
+plot_ramps(real_to_pred_ramps_up, real_to_pred_ramps_down)
+legend ('Detected up (real)','Detected down (real)','ts up','ts down')
+%%
+plot_ramps(pred_to_real_ramps_up, pred_to_real_ramps_down)
+legend ('Detected up (pred)','Detected down (pred)','ts up','ts down')
+
+%%  calculate the difference between detected ramps and the corresponding forecast time series (detected - time series)
+[r2p_diff_up, r2p_diff_down] = compare_diffs(real_to_pred_ramps_up, real_to_pred_ramps_down);
+[p2r_diff_up, p2r_diff_down] = compare_diffs(pred_to_real_ramps_up, pred_to_real_ramps_down);
+
+
+%% plot diffs
+
+% diffs_label = [  'Start ';
+%                  'End   ';
+%                  'Height'];
+% 
+% figure
+% p_up = subplot(1,2,1);
+% boxplot(r2p_diff_up(:, 3:5), diffs_label);
+% ylabel('MW');
+% title('Difference UP (Real to Pred)');
+% 
+% p_down = subplot(1,2,2);
+% boxplot(r2p_diff_down(:, 3:5), diffs_label);
+% ylabel('MW');
+% title('Difference DOWN (Real to Pred)');
+% 
+% linkaxes([p_up, p_down],'y')
+
+%%
+plot_diffs(r2p_diff_up, r2p_diff_down, '(Real to Pred)')
+plot_diffs(p2r_diff_up, p2r_diff_down, '(Pred to Real)')
+
+%% calculate swing
+swing_real_up = detected_up_ramps_real(:,4)-real_to_pred_ramps_up(:,3);
+swing_pred_up = real_to_pred_ramps_up(:,6)-real_to_pred_ramps_up(:,5);
+
+swing_real_down = real_to_pred_ramps_down(:,3)-real_to_pred_ramps_down(:,4);
+swing_pred_down = real_to_pred_ramps_down(:,5)-real_to_pred_ramps_down(:,6);
+
+swing_real_all = [swing_real_up;swing_real_down];
+swing_pred_all = [swing_pred_up;swing_pred_down];
+
+%% Swing Plots
+scenarios = ['Real Ramps                 ';
+             'Extrapolated Forecast Ramps';
+             'Difference (Real - Pred)       '];
+swing(:,1) = swing_real_all;
+swing(:,2) = swing_pred_all;
+swing(:,3) = swing_real_all - swing_pred_all;
+figure
+boxplot(swing, scenarios);
+ylabel('MW')
+title('Swing Comparison')

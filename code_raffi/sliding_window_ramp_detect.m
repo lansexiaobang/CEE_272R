@@ -1,0 +1,100 @@
+function [retval] = sliding_window_ramp_detect...
+    (W_size, N_overlap, chng_idx, wind, w_pw, params, cost_fxn)
+
+n_max  = floor((length(wind) + W_size - N_overlap )/( W_size - N_overlap))-1;
+dp_idx = {};
+
+% n = 2
+for n = 1:n_max
+    
+    n_start     = (n-1)*(W_size-N_overlap);
+    n_end       = n*W_size-(n-1)*N_overlap;
+    dp_idx{n}   = [n_start, n_end];
+
+    disp(['n=',num2str(n),'/', num2str(n_max), ' signal_idx = {', ...
+        num2str(n_start),' ', num2str(n_end), '}']);
+    
+    idx         = find( chng_idx > n_start & chng_idx < n_end );
+    if (n == 20)
+        disp('stop')
+    end
+    if ( ~isempty(idx) )
+        
+        disp(length(idx))
+        x           = chng_idx(idx);
+        p           = w_pw(chng_idx(idx));
+        
+        [J, K]      = DP_induction(x, p, cost_fxn, params);
+        
+        k_vec       = K(:, end);
+        % k_vec     = K(1, :);
+        
+        [r]         = ramp_extract(k_vec, x, p, cost_fxn, params);
+        rmps{n}     = r;
+        
+%         figure(1); clf; hold on;
+%         plot(x, p);
+%         for ridx = 1:size(r, 1) 
+%             plot(x(r(ridx, 1):r(ridx, 2)) , p(r(ridx, 1):r(ridx, 2)), 'r.');
+%         end
+%         pause(0.01);
+
+    end
+end
+
+%% merge ramps together
+g_ramp = [];
+for n = 1:n_max
+    n_start = dp_idx{n}(1);
+    n_end   = dp_idx{n}(2);
+    
+    idx = find(chng_idx > n_start & chng_idx < n_end);
+    if (~isempty(idx))
+        x = chng_idx(idx);
+        p = w_pw(chng_idx(idx));
+    
+        % rmps{n}        
+        % clf; hold on;
+        % plot(x, p, '.-')
+        
+        for k = 1:size(rmps{n}, 1)
+            
+            % plot([x(rmps{n}(k, 1)), x(rmps{n}(k, 2))], ...
+            %     [p(rmps{n}(k, 1)), p(rmps{n}(k, 2))], 'rs-' )
+            
+            g_ramp = [g_ramp; x(rmps{n}(k, 1)), x(rmps{n}(k, 2)), ...
+                              p(rmps{n}(k, 1)), p(rmps{n}(k, 2)) ];
+        end
+    end
+end
+
+
+g_ramp_unq_1 = unique(g_ramp, 'rows');
+%% Remove straggler ramps. (that bridge windows).
+
+% find ramps that share a start.
+repeat_ramp_idx = find(diff(g_ramp_unq_1(:, 1))==0);
+remove_idx      = [];
+for k = 1:length(repeat_ramp_idx)
+    if g_ramp_unq_1(repeat_ramp_idx(k), 2) < g_ramp_unq_1(repeat_ramp_idx(k) + 1 , 2)
+        remove_idx = [remove_idx, repeat_ramp_idx(k) ];
+    end
+end
+
+g_ramp_unq_2 = g_ramp_unq_1(setdiff(1:size(g_ramp_unq_1, 1), remove_idx), :);
+g_ramp_unq_3 = g_ramp_unq_2; %[g_ramp_unq_2(1:5, :); 1050 g_ramp_unq_2(5, 2:4); g_ramp_unq_2(6:7, :)];
+
+% find ramps that share a end.
+repeat_ramp_idx = find(diff(g_ramp_unq_3(:, 2))==0);
+remove_idx      = [];
+
+for k = 1:length(repeat_ramp_idx)
+    if g_ramp_unq_3(repeat_ramp_idx(k), 1) < g_ramp_unq_3(repeat_ramp_idx(k) + 1 , 1)
+        remove_idx = [remove_idx, repeat_ramp_idx(k)+1];
+    end
+end
+
+g_ramp_unq_4 = g_ramp_unq_3(setdiff(1:size(g_ramp_unq_3, 1), remove_idx), :);
+
+retval = g_ramp_unq_4;
+
